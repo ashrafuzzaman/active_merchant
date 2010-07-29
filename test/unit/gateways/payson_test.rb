@@ -7,6 +7,7 @@ class PaysonTest < Test::Unit::TestCase
   PAYMENT_DETAILS_URL = "https://api.payson.se/1.0/PaymentDetails/"
 
   SUCCESSFUL_TOKEN = "5df04540-f103-4598-8567-5fc2e9fdcde6"
+  INVALID_TOKEN = "123ABC"
 
   def setup
     @gateway = PaysonGateway.new(valid_credentials)
@@ -62,7 +63,7 @@ class PaysonTest < Test::Unit::TestCase
   end
 
   def test_payment_redirection_url
-    assert_equal "#{PAYMENT_REDIRECT_URL}?token=123ABC", @gateway.payment_redirection_url("123ABC")
+    assert_equal "#{PAYMENT_REDIRECT_URL}?token=#{INVALID_TOKEN}", @gateway.payment_redirection_url(INVALID_TOKEN)
   end
 
   def test_payson_response
@@ -89,8 +90,8 @@ class PaysonTest < Test::Unit::TestCase
     gateway.expects(:ssl_post).returns(failed_with_invalid_credentials_body)
 
     response = gateway.authorize(@valid_authorize_options)
-    assert_instance_of PaysonResponse, response
 
+    assert_instance_of PaysonResponse, response
     assert response.fail?
     assert !response.success?
   end
@@ -101,8 +102,8 @@ class PaysonTest < Test::Unit::TestCase
       returns(successful_authorization_response_body)
 
     response = @gateway.authorize(@valid_authorize_options)
-    assert_instance_of PaysonResponse, response
 
+    assert_instance_of PaysonResponse, response
     assert response.success?
     assert !response.fail?
   end
@@ -112,18 +113,34 @@ class PaysonTest < Test::Unit::TestCase
     gateway.expects(:ssl_post).returns(failed_with_invalid_credentials_body)
 
     response = gateway.authorize(@valid_authorize_options)
-    assert_instance_of PaysonResponse, response
 
+    assert_instance_of PaysonResponse, response
     assert response.fail?
     assert !response.success?
   end
 
   def test_successful_payment_details
-    # TODO: ...when the potential API bug is resolved.
+    @gateway.expects(:ssl_post).
+      with(payment_details_url, successful_payment_details_request_body.strip, valid_request_headers).
+      returns(successful_payment_details_response_body)
+
+    response = @gateway.payment_details(SUCCESSFUL_TOKEN)
+
+    assert_instance_of PaysonResponse, response
+    assert response.success?
+    assert !response.fail?
   end
 
   def test_failed_payment_details
-    # TODO: ...when the potential API bug is resolved.
+    @gateway.expects(:ssl_post).
+      with(payment_details_url, failed_payment_details_request_body.strip, valid_request_headers).
+      returns(failed_payment_details_response_body)
+
+    response = @gateway.payment_details(INVALID_TOKEN)
+
+    assert_instance_of PaysonResponse, response
+    assert !response.success?
+    assert response.fail?
   end
 
   protected
@@ -166,8 +183,8 @@ class PaysonTest < Test::Unit::TestCase
       "#{PAYMENT_REDIRECT_URL}?token=#{token}"
     end
 
-    def payment_details_url(token = nil)
-      "#{PAYMENT_DETAILS_URL}?token=#{token}"
+    def payment_details_url
+      "#{PAYMENT_DETAILS_URL}"
     end
 
     # TOKENS
@@ -195,6 +212,18 @@ class PaysonTest < Test::Unit::TestCase
       REQUEST
     end
 
+    def successful_payment_details_request_body
+      <<-RESPONSE
+      token=5df04540-f103-4598-8567-5fc2e9fdcde6
+      RESPONSE
+    end
+
+    def failed_payment_details_request_body
+      <<-RESPONSE
+      token=123ABC
+      RESPONSE
+    end
+
     # RESPONSES
 
     def failed_with_invalid_credentials_body
@@ -215,15 +244,15 @@ class PaysonTest < Test::Unit::TestCase
       RESPONSE
     end
 
-    # TODO: ...when PaymentDetails issue is resolved.
     def successful_payment_details_response_body
       <<-RESPONSE
+      responseEnvelope.ack=SUCCESS&responseEnvelope.timestamp=2010-07-29T15%3a18%3a36&responseEnvelope.version=1.0&currencyCode=SEK&senderEmail=grimen%40gmail.com&custom=&correlationId=135372&purchaseId=3566124&status=COMPLETED&token=23c26dd2-1c27-48d1-abc2-40b8dcd004b9&receiverList.receiver(0).email=zmn.ashraf%40gmail.com&receiverList.receiver(0).amount=1.00
       RESPONSE
     end
 
-    # TODO: ...when PaymentDetails issue is resolved.
     def failed_payment_details_response_body
       <<-RESPONSE
+      responseEnvelope.ack=FAILURE&responseEnvelope.timestamp=2010-07-29T15%3a21%3a47&responseEnvelope.version=1.0
       RESPONSE
     end
 

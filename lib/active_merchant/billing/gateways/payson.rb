@@ -9,7 +9,9 @@ module ActiveMerchant #:nodoc:
           :pay => 'https://www.payson.se/PaySecure/',
           :payment_details => 'https://api.payson.se/1.0/PaymentDetails/'
         }
-      }
+      } unless defined?(ENDPOINT_URLS)
+
+      ACTIONS_WITH_URL_TOKEN = [:pay] unless defined?(ACTIONS_WITH_URL_TOKEN)
 
       # The name of the gateway
       self.display_name = 'Payson'
@@ -43,21 +45,24 @@ module ActiveMerchant #:nodoc:
         self.add_meta(options)
         self.add_callbacks(options)
 
-        response = commit('authorize')
+        response = commit(:authorize)
         @token = response.success? ? response.token : nil
         response
       end
 
       # Get the Payson URL to redirect to for collecting payment.
       def payment_redirection_url(token = nil)
-        self.endpoint_url_with_token('pay', token)
+        self.endpoint_url_with_token(:pay, token)
       end
 
       # Get payment details if available for a payment identified by a known payment token.
       # Used for validating a payment as well.
       def payment_details(token = nil)
-        # FIXME: API BUG?: Payson returns FAILURE always even though the payment is successful (in the Payson records). =S
-        commit('payment_details', :token => token)
+        @post = ActiveMerchant::PostData.new
+
+        self.add_token(token)
+
+        commit(:payment_details)
       end
       alias :details_for :payment_details # PayPal Express...
 
@@ -100,6 +105,10 @@ module ActiveMerchant #:nodoc:
                       'currencyCode' => options[:currency_code])
         end
 
+        def add_token(token)
+          @post.merge!(:token => token)
+        end
+
         # Set required Payson API headers.
         def headers(options = {})
           options.merge!(@options)
@@ -110,30 +119,24 @@ module ActiveMerchant #:nodoc:
         # Get the API endpoint URL for specified action.
         def endpoint_url(action)
           return '' if action.blank?
-          ENDPOINT_URLS[self.gateway_mode][action.to_sym]
-        rescue
-          ENDPOINT_URLS[:production][action.to_sym]
+          ENDPOINT_URLS[self.gateway_mode][action.to_sym] rescue ENDPOINT_URLS[:production][action.to_sym]
         end
 
         # Get the API endpoint URL for a specified action with the current/specified token as param.
         def endpoint_url_with_token(action, token = nil)
           @token = token if token
-          if @token.present?
-            "#{endpoint_url(action)}?token=#{@token}"
-          else
-            endpoint_url(action)
-          end
-        end
-
-        # Perform API call with specified action and optionally additional params.
-        def commit(action, token = nil)
-          url = endpoint_url_with_token(action, token)
-          response_body = ssl_post(url, post_data, headers)
-          ActiveMerchant::Billing::PaysonResponse.new(response_body)
+          "#{endpoint_url(action)}?token=#{@token}"
         end
 
         def post_data
           @post.present? ? @post.to_post_data : ""
+        end
+
+        # Perform API call with specified action and optionally additional params.
+        def commit(action, token = nil)
+          url = endpoint_url(action)
+          response_body = ssl_post(url, post_data, headers)
+          ActiveMerchant::Billing::PaysonResponse.new(response_body)
         end
 
     end
