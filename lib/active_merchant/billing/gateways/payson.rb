@@ -7,7 +7,6 @@ module ActiveMerchant #:nodoc:
         :production => {
           :authorize => 'https://api.payson.se/1.0/Pay/',
           :pay => 'https://www.payson.se/PaySecure/',
-          :validate => 'https://api.payson.se/1.0/Validate/',
           :payment_details => 'https://api.payson.se/1.0/PaymentDetails/'
         }
       }
@@ -15,7 +14,7 @@ module ActiveMerchant #:nodoc:
       # The name of the gateway
       self.display_name = 'Payson'
       # The homepage URL of the gateway
-      self.homepage_url = 'https://api.payson.se/'
+      self.homepage_url = 'https://api.payson.se'
       # The countries the gateway supports merchants from as 2 digit ISO country codes
       self.supported_countries = ['SE']
       # The default currency for the transactions if no currency is provided
@@ -25,42 +24,50 @@ module ActiveMerchant #:nodoc:
       # :cents => '1250'
       self.money_format = :dollars
 
+      attr_accessor :options
+      attr_accessor :post
+      alias :request_params :post
+
       def initialize(options = {})
         requires!(options, :login, :password)
         @options = options
         super
       end
 
+      # Authorize a payment to receive a unique payment token.
       def authorize(options = {})
         @post = ActiveMerchant::PostData.new
 
         self.add_receivers(options)
         self.add_customer(options)
-        self.add_callbacks(options)
         self.add_meta(options)
+        self.add_callbacks(options)
 
         response = commit('authorize')
         @token = response.success? ? response.token : nil
         response
       end
 
+      # Get the Payson URL to redirect to for collecting payment.
       def payment_redirection_url(token = nil)
-        endpoint = endpoint_url('pay')
-        token = token || @token
-        "#{endpoint}?token=#{token}"
+        self.endpoint_url_with_token('pay', token)
       end
 
+      # Get payment details if available for a payment identified by a known payment token.
+      # Used for validating a payment as well.
       def payment_details(token = nil)
-        endpoint = endpoint_url(:payment_details)
-        token = token || @token
-        url = "#{endpoint}?token=#{token}"
+        # FIXME: API BUG?: Payson returns FAILURE always even though the payment is successful (in the Payson records). =S
+        commit('payment_details', :token => token)
+      end
+      alias :details_for :payment_details # PayPal Express...
 
-        response_body = ssl_request(:get, url, nil)
-        ActiveMerchant::Billing::PaysonResponse.new(self.parse(response_body))
+      def self.supported_currencies
+        ["SEK", "EUR"]
       end
 
       protected
 
+        # Add payment receviers (at least one). Required params are +:email+ and +:amount+ in SEK or EUR.
         def add_receivers(options)
           requires!(options, :receivers)
           options[:receivers].each_with_index do |v, i|
@@ -69,6 +76,7 @@ module ActiveMerchant #:nodoc:
           end
         end
 
+        # Add customer e-mail for identification, i.e. the one the sent the payment.
         def add_customer(options)
           requires!(options, :sender)
           @post.merge!('senderEmail' => options[:sender][:email],
@@ -76,49 +84,58 @@ module ActiveMerchant #:nodoc:
                       'senderLastName' => options[:sender][:last_name])
         end
 
+        # Add callback URLs that Payson should redirect to upon successful or failed/canceled payment.
         def add_callbacks(options)
           requires!(options, :return_url, :cancel_url)
           @post.merge!('returnUrl' => options[:return_url],
                       'cancelUrl' => options[:cancel_url])
         end
 
+        # Add additional payment details, for tracking.
         def add_meta(options)
           requires!(options, :memo)
-          options[:currency_code] ||= self.default_currency
+          options[:currency_code] = self.default_currency unless self.class.supported_currencies.include?(options[:currency_code].to_s)
           @post.merge!('custom' => options[:custom],
                       'memo' => options[:memo],
                       'currencyCode' => options[:currency_code])
         end
 
-        def headers(options)
+        # Set required Payson API headers.
+        def headers(options = {})
+          options.merge!(@options)
           {'PAYSON-SECURITY-USERID' => options[:login],
            'PAYSON-SECURITY-PASSWORD' => options[:password]}
         end
 
-        def parse(body)
-          return {} if body.blank?
-
-          body.split('&').inject({}) do |memo, chunk|
-            next if chunk.empty?
-            key, value = chunk.split('=', 2)
-            next if key.empty?
-            value = value.nil? ? nil : CGI.unescape(value)
-            memo[CGI.unescape(key)] = value
-            memo
-          end
-        end
-
+        # Get the API endpoint URL for specified action.
         def endpoint_url(action)
+          return '' if action.blank?
           ENDPOINT_URLS[self.gateway_mode][action.to_sym]
         rescue
           ENDPOINT_URLS[:production][action.to_sym]
         end
 
-        def commit(action, post = ActiveMerchant::PostData.new)
-          @post.merge!(post)
-          response_body = ssl_post(endpoint_url(action), @post.to_post_data, headers(@options))
-          ActiveMerchant::Billing::PaysonResponse.new(self.parse(response_body))
+        # Get the API endpoint URL for a specified action with the current/specified token as param.
+        def endpoint_url_with_token(action, token = nil)
+          @token = token if token
+          if @token.present?
+            "#{endpoint_url(action)}?token=#{@token}"
+          else
+            endpoint_url(action)
+          end
         end
+
+        # Perform API call with specified action and optionally additional params.
+        def commit(action, token = nil)
+          url = endpoint_url_with_token(action, token)
+          response_body = ssl_post(url, post_data, headers)
+          ActiveMerchant::Billing::PaysonResponse.new(response_body)
+        end
+
+        def post_data
+          @post.present? ? @post.to_post_data : ""
+        end
+
     end
   end
 end
