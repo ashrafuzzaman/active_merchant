@@ -138,7 +138,7 @@ class PaysonTest < Test::Unit::TestCase
 
     response = @gateway.payment_details(SUCCESSFUL_TOKEN)
 
-    assert_instance_of PaysonResponse, response
+    assert_instance_of PaysonPaymentDetailsResponse, response
     assert response.success?
     assert !response.fail?
   end
@@ -150,7 +150,7 @@ class PaysonTest < Test::Unit::TestCase
 
     response = @gateway.payment_details(INVALID_TOKEN)
 
-    assert_instance_of PaysonResponse, response
+    assert_instance_of PaysonPaymentDetailsResponse, response
     assert !response.success?
     assert response.fail?
   end

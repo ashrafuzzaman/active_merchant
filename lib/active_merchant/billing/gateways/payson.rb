@@ -73,72 +73,77 @@ module ActiveMerchant #:nodoc:
 
       protected
 
-        # Add payment receviers (at least one). Required params are +:email+ and +:amount+ in SEK or EUR.
-        def add_receivers(options)
-          requires!(options, :receivers)
-          options[:receivers].each_with_index do |v, i|
-            @post["receiverList.receiver(#{i}).email"] = v[:email]
-            @post["receiverList.receiver(#{i}).amount"] = v[:amount]
-          end
+      # Add payment receviers (at least one). Required params are +:email+ and +:amount+ in SEK or EUR.
+      def add_receivers(options)
+        requires!(options, :receivers)
+        options[:receivers].each_with_index do |v, i|
+          @post["receiverList.receiver(#{i}).email"] = v[:email]
+          @post["receiverList.receiver(#{i}).amount"] = v[:amount]
         end
+      end
 
-        # Add customer e-mail for identification, i.e. the one the sent the payment.
-        def add_customer(options)
-          requires!(options, :sender)
-          @post.merge!('senderEmail' => options[:sender][:email],
-                      'senderFirstName' => options[:sender][:first_name],
-                      'senderLastName' => options[:sender][:last_name])
-        end
+      # Add customer e-mail for identification, i.e. the one the sent the payment.
+      def add_customer(options)
+        requires!(options, :sender)
+        @post.merge!('senderEmail' => options[:sender][:email],
+          'senderFirstName' => options[:sender][:first_name],
+          'senderLastName' => options[:sender][:last_name])
+      end
 
-        # Add callback URLs that Payson should redirect to upon successful or failed/canceled payment.
-        def add_callbacks(options)
-          requires!(options, :return_url, :cancel_url)
-          @post.merge!('returnUrl' => options[:return_url],
-                      'cancelUrl' => options[:cancel_url])
-        end
+      # Add callback URLs that Payson should redirect to upon successful or failed/canceled payment.
+      def add_callbacks(options)
+        requires!(options, :return_url, :cancel_url)
+        @post.merge!('returnUrl' => options[:return_url],
+          'cancelUrl' => options[:cancel_url])
+      end
 
-        # Add additional payment details, for tracking.
-        def add_meta(options)
-          requires!(options, :memo)
-          options[:currency_code] = self.default_currency unless self.class.supported_currencies.include?(options[:currency_code].to_s)
-          @post.merge!('custom' => options[:custom],
-                      'memo' => options[:memo],
-                      'currencyCode' => options[:currency_code])
-        end
+      # Add additional payment details, for tracking.
+      def add_meta(options)
+        requires!(options, :memo)
+        options[:currency_code] = self.default_currency unless self.class.supported_currencies.include?(options[:currency_code].to_s)
+        @post.merge!('custom' => options[:custom],
+          'memo' => options[:memo],
+          'currencyCode' => options[:currency_code])
+      end
 
-        def add_token(token)
-          @post.merge!(:token => token)
-        end
+      def add_token(token)
+        @post.merge!(:token => token)
+      end
 
-        # Set required Payson API headers.
-        def headers(options = {})
-          options.merge!(@options)
-          {'PAYSON-SECURITY-USERID' => options[:login],
-           'PAYSON-SECURITY-PASSWORD' => options[:password]}
-        end
+      # Set required Payson API headers.
+      def headers(options = {})
+        options.merge!(@options)
+        {'PAYSON-SECURITY-USERID' => options[:login],
+          'PAYSON-SECURITY-PASSWORD' => options[:password]}
+      end
 
-        # Get the API endpoint URL for specified action.
-        def endpoint_url(action)
-          return '' if action.blank?
-          ENDPOINT_URLS[self.gateway_mode][action.to_sym] rescue ENDPOINT_URLS[:production][action.to_sym]
-        end
+      # Get the API endpoint URL for specified action.
+      def endpoint_url(action)
+        return '' if action.blank?
+        ENDPOINT_URLS[self.gateway_mode][action.to_sym] rescue ENDPOINT_URLS[:production][action.to_sym]
+      end
 
-        # Get the API endpoint URL for a specified action with the current/specified token as param.
-        def endpoint_url_with_token(action, token = nil)
-          @token = token if token
-          "#{endpoint_url(action)}?token=#{@token}"
-        end
+      # Get the API endpoint URL for a specified action with the current/specified token as param.
+      def endpoint_url_with_token(action, token = nil)
+        @token = token if token
+        "#{endpoint_url(action)}?token=#{@token}"
+      end
 
-        def post_data
-          @post.present? ? @post.to_post_data : ""
-        end
+      def post_data
+        @post.present? ? @post.to_post_data : ""
+      end
 
-        # Perform API call with specified action and optionally additional params.
-        def commit(action)
-          url = endpoint_url(action)
-          response_body = ssl_post(url, post_data, headers)
+      # Perform API call with specified action and optionally additional params.
+      def commit(action)
+        url = endpoint_url(action)
+        response_body = ssl_post(url, post_data, headers)
+        #ActiveMerchant::Billing::PaysonResponse.new(response_body)
+        if action.to_sym == :payment_details
+          ActiveMerchant::Billing::PaysonPaymentDetailsResponse.new(response_body)
+        else
           ActiveMerchant::Billing::PaysonResponse.new(response_body)
         end
+      end
 
     end
   end
