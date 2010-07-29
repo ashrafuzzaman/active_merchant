@@ -1,4 +1,5 @@
 require 'active_merchant/billing/gateways/payson/payson_response'
+require 'active_merchant/billing/gateways/payson/payson_payment_details_response'
 
 module ActiveMerchant #:nodoc:
   module Billing #:nodoc:
@@ -133,7 +134,7 @@ module ActiveMerchant #:nodoc:
         end
 
         # Perform API call with specified action and optionally additional params.
-        def commit(action, token = nil)
+        def commit(action)
           url = endpoint_url(action)
           response_body = ssl_post(url, post_data, headers)
           ActiveMerchant::Billing::PaysonResponse.new(response_body)

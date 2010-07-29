@@ -85,6 +85,18 @@ class PaysonTest < Test::Unit::TestCase
     assert_equal successful_authorization_response_body.strip, response.body
   end
 
+  def test_payson_payment_details_response
+    response = PaysonPaymentDetailsResponse.new(successful_payment_details_response_body)
+
+    assert_equal ['CREATED', 'PENDING', 'PROCESSING', 'COMPLETED', 'INCOMPLETE', 'ERROR', 'EXPIRED', 'REVERSALERROR'], PaysonPaymentDetailsResponse::STATUSES
+    PaysonPaymentDetailsResponse::STATUSES.each do |status|
+      assert_respond_to response, :"#{status.downcase}?"
+    end
+    assert response.completed?
+    assert !response.pending?
+    # etc...
+  end
+
   def test_failed_authorization_with_invalid_credentials
     gateway = PaysonGateway.new(invalid_credentials)
     gateway.expects(:ssl_post).returns(failed_with_invalid_credentials_body)
